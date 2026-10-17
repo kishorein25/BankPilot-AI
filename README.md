@@ -185,6 +185,3 @@ Live Groq availability must be checked separately.
 - It uses fictional accounts and simple fraud rules, without login or real banking connections; AI failures may use fallback mode.
 - A request may contain both live AI and fallback steps, so check individual agent activity logs.
 
-## Demo Video Guide
-
-Show account selection, the five example questions, the combined agent workflow and adding a demo transaction. Explain the architecture and limitations within 5–10 minutes.
