@@ -16,7 +16,6 @@ Built with **Python**, **Streamlit**, **SQLite**, and **Groq LLM** (`qwen/qwen3.
 - [Groq API Key Setup (Free)](#-groq-api-key-setup-free)
 - [How to Test the Project](#-how-to-test-the-project)
 - [Simulator & Reset Features](#-simulator--reset-features)
-- [Interview & Evaluator Q&A](#-interview--evaluator-qa)
 
 ---
 
@@ -178,26 +177,31 @@ python3 -m venv .venv
 
 ---
 
-## 🔑 Groq API Key Setup (Free)
+## 🔑 Groq API Key Setup
 
-BankPilot AI supports ultra-fast live LLM routing and tool calling using Groq:
+You can run BankPilot AI in two ways:
 
-1. Visit [https://console.groq.com/keys](https://console.groq.com/keys) (free sign in).
-2. Click **Create API Key** and copy it.
-3. In the project folder, copy `.env.example` to `.env`:
+### Option A: Built-in Demo Mode (Zero Setup - Clone & Run)
+- If you don't configure an API key, the system automatically uses its **deterministic offline engine**.
+- All 5 banking workflows, loan affordability assessments, fraud detection rules, and the transaction simulator work 100% out of the box with zero setup!
+
+### Option B: Live AI Mode (Free Groq Key)
+To enable live AI model execution with `qwen/qwen3.8-27b`:
+1. Get a free API key at [https://console.groq.com/keys](https://console.groq.com/keys).
+2. In the project folder, create a `.env` file from the example:
    ```bash
    # Windows PowerShell
    Copy-Item .env.example .env
    # Mac/Linux
    cp .env.example .env
    ```
-4. Open `.env` and add your key:
+3. Open `.env` and paste your key:
    ```ini
-   GROQ_API_KEY=gsk_your_actual_key_here
+   GROQ_API_KEY=gsk_your_key_here
    GROQ_MODEL=qwen/qwen3.8-27b
    ```
-5. Restart Streamlit — the sidebar will automatically show:  
-   `🟢 Live LLM Request Succeeded (Model: qwen/qwen3.8-27b)`!
+4. Restart the app. The sidebar will immediately show:  
+   `🟢 Live LLM Request Succeeded (Model: qwen/qwen3.8-27b)`.
 
 ---
 
@@ -235,22 +239,6 @@ Run tests using:
   Try posting a debit larger than available balance (e.g. ₹10,00,000). The simulator immediately rejects it under the simulated no-overdraft policy.
 - **Reset Demo Data Button:**  
   Click **"Reset Demo Data"** in the sidebar at any time to restore pristine seed records.
-
----
-
-## ❓ Interview & Evaluator Q&A
-
-**Q1: Why did you use integer paise instead of floating-point numbers?**  
-*Answer:* Floating-point numbers (`0.1 + 0.2 != 0.3`) accumulate rounding errors over repeated transactions. In financial systems, storing currency in integer paise (`₹1 = 100 paise`) ensures 100% exact addition and subtraction without drift.
-
-**Q2: How do you prevent the AI from accessing another customer's data?**  
-*Answer:* We enforce tenant boundaries in application code, not prompt engineering. The tool dispatcher injects the verified active session account ID directly into every tool parameter, ignoring any customer ID the model might attempt to provide.
-
-**Q3: What happens if Groq API goes down or the key runs out of quota?**  
-*Answer:* BankPilot AI automatically engages **Demo Fallback Mode**. The deterministic pattern engine continues answering all 5 use cases and running tools without crashing.
-
-**Q4: How do the Fraud and Loan agents coordinate in the combined workflow?**  
-*Answer:* The Supervisor executes Banking $\rightarrow$ Fraud $\rightarrow$ Loan. If the Fraud Specialist finds unresolved risk triggers, it passes a structured flag to the Loan Specialist. The loan agent still transparently calculates the mathematical EMI and affordability ratio, but updates the final policy recommendation to **Held for Underwriter Manual Review**.
 
 ---
 
