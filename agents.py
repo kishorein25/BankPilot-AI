@@ -57,6 +57,7 @@ class MultiAgentResponse:
     execution_traces: List[ExecutionTraceItem]
     supporting_tool_results: Dict[str, Any]
     mode: str  # 'live_llm' or 'fallback_deterministic'
+    llm_status: str = "fallback_deterministic"  # 'live_success', 'api_error_fallback', 'fallback_deterministic'
     needs_clarification: bool = False
     pending_loan_context: Optional[Dict[str, Any]] = None
 
@@ -814,10 +815,24 @@ def process_user_query(
         agent: finding.get("tool_result") for agent, finding in specialist_findings.items()
     }
 
+    # Determine honest LLM status
+    has_live = any(t.status == "live_success" for t in all_traces)
+    has_fallback = any(t.status == "fallback_deterministic" for t in all_traces)
+
+    if client is None:
+        llm_status = "fallback_deterministic"
+    elif has_live and not has_fallback:
+        llm_status = "live_success"
+    elif has_live and has_fallback:
+        llm_status = "live_success"  # Partial success with fallback
+    else:
+        llm_status = "api_error_fallback"
+
     return MultiAgentResponse(
         content=response_content,
         route=route,
         execution_traces=all_traces,
         supporting_tool_results=supporting_results,
         mode=mode,
+        llm_status=llm_status,
     )

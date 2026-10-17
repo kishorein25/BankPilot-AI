@@ -13,8 +13,8 @@ flowchart TD
     User([User / Browser]) <--> UI[Streamlit Interface\napp.py]
     UI <--> Supervisor[Supervisor Orchestrator\nagents.py]
     
-    Supervisor -->|Route & Findings| BankingAgent[Banking Specialist\nAccount & Transactions]
-    Supervisor -->|Route & Findings| FraudAgent[Fraud Specialist\nRisk & Velocity Anomaly]
+    Supervisor -->|Route & Account Context| BankingAgent[Banking Specialist\nAccount & Transactions]
+    Supervisor -->|Route & Account Context| FraudAgent[Fraud Specialist\nRisk & Velocity Anomaly]
     Supervisor -->|Route & Fraud Context| LoanAgent[Loan Specialist\nEMI & Affordability FOIR]
     
     BankingAgent <--> Tools[Simulated Banking Tools\ntools.py]
@@ -39,7 +39,31 @@ flowchart TD
 | **Five Supported Use Cases** | `agents.py`, `app.py`, `test_core.py` | Covers balance, transactions, fraud, loan affordability, and combined 3-agent evaluation. |
 | **Transaction Simulator** | `app.py`, `database.py` | Explicit form to post credits/debits with no-overdraft simulation enforcement. |
 | **Explainable Trace** | `app.py` (`ExecutionTraceItem`) | Visualizes agent name, tool called, sanitized arguments, latency in milliseconds, model, and status. |
-| **Demo Fallback Mode** | `agents.py` (`execute_specialist_fallback`) | Deterministic engine ensures full functionality even without an internet connection or Groq API key. |
+| **Honest AI Status & Fallback** | `agents.py`, `app.py` | Explicitly distinguishes Live LLM success, API failure fallback, and Demo Fallback mode. |
+
+---
+
+## 👥 The Two Demo Accounts (Sample Business Accounts)
+
+> *“These are sample business accounts with fictional data. Choose one to explore its balance, transactions and loan affordability.”*
+
+The database automatically seeds two realistic sample accounts:
+
+* **`CUST-101` — Apex Traders (Proprietor: Rajesh Sharma)**
+  * **Account Type:** Current Account - SME
+  * **Opening Balance:** ₹2,00,000.00 | **Available Balance:** ₹2,37,000.00
+  * **Declared Monthly Income:** ₹1,50,000.00 | **Existing Monthly EMI:** ₹15,000.00 (10% FOIR)
+  * **Actual Stored Records:** Wholesale supplier with steady operational cashflow, balanced credits and debits, and zero policy breaches.
+  * **Simulation Role:** Ideal for demonstrating clean account inquiries and approved loan affordability (15.9% total debt-to-income).
+
+* **`CUST-102` — BlueHorizon Logistics (Proprietor: Priya Nair)**
+  * **Account Type:** Current Account - Transport Commercial
+  * **Opening Balance:** ₹3,50,000.00 | **Available Balance:** ₹3,55,000.00
+  * **Declared Monthly Income:** ₹2,50,000.00 | **Existing Monthly EMI:** ₹40,000.00 (16% FOIR)
+  * **Actual Stored Records:** High-turnover fleet freight operator with a recent single debit of ₹65,000 (exceeding the ₹50,000 threshold) and 3 debits within the last 24 hours.
+  * **Simulation Role:** Ideal for demonstrating fraud policy detection and underwriter review hold on loan applications.
+
+Selecting an account scopes all displayed data, tools, chat context, and results strictly to that account. Switching accounts automatically clears conversation history and pending contexts.
 
 ---
 
@@ -61,7 +85,7 @@ The simulator natively supports and validates these exact demonstration queries:
 
 4. **"Can I afford a ₹1 lakh loan over 12 months?"**  
    *Route:* `Loan Specialist`  
-   *Output:* Mathematical EMI calculation, existing EMI total, and Debt-to-Income (FOIR) evaluation against the 50% policy limit.
+   *Output:* Mathematical EMI calculation (₹8,885/mo @ 12%), existing EMI total, and Debt-to-Income (FOIR) evaluation against the 50% policy limit.
 
 5. **"Check my account and suspicious transactions before assessing whether I can afford a ₹1 lakh loan over 12 months."**  
    *Route:* `Banking Specialist` → `Fraud Specialist` → `Loan Specialist`  
@@ -69,21 +93,17 @@ The simulator natively supports and validates these exact demonstration queries:
 
 ---
 
-## 👥 Fictional Customer Profiles
+## 🛡️ Fictional Fraud & Loan Policies
 
-The database automatically seeds two realistic small-business profiles:
+All financial calculations and policy outcomes come strictly from deterministic tools in `tools.py`:
 
-* **`CUST-101` — Apex Traders (Owner: Rajesh Sharma)**
-  * **Profile:** Stable wholesale supplier.
-  * **Declared Monthly Income:** ₹1,50,000.
-  * **Existing Monthly EMI:** ₹15,000.
-  * **Transaction History:** Consistent operational expenses and client settlements with **no fraud flags**. Ideal for demonstrating approved affordability.
-
-* **`CUST-102` — BlueHorizon Logistics (Owner: Priya Nair)**
-  * **Profile:** Transport & fleet operator.
-  * **Declared Monthly Income:** ₹2,50,000.
-  * **Existing Monthly EMI:** ₹40,000.
-  * **Transaction History:** Includes a high-value debit (₹65,000) and rapid debits within 24 hours. Ideal for demonstrating **fraud rule triggers and underwriter loan holds**.
+* **Fraud Policy 1 (Large Debit Threshold):** Any single `DEBIT >= ₹50,000` (5,000,000 paise) triggers a `LARGE_DEBIT_THRESHOLD` high-risk warning.
+* **Fraud Policy 2 (Rapid Debit Velocity):** `3 or more DEBITs` within a rolling `24-hour window` triggers a `RAPID_DEBIT_VELOCITY` medium-risk warning.
+* **Loan EMI Formula:** Computed via standard amortization in code:
+  $$E = P \cdot r \cdot \frac{(1+r)^N}{(1+r)^N - 1} \quad (\text{for } r > 0), \quad E = \frac{P}{N} \quad (\text{for } r = 0)$$
+  where $r = \frac{\text{annual rate}}{12 \times 100}$.
+* **Affordability Threshold:** Proposed Total EMI $(\text{Existing EMI} + \text{Proposed EMI}) \le 50\%$ of declared monthly income (FOIR $\le 50\%$).
+* **Fraud-Loan Interaction:** If unresolved suspicious activity exists, the loan is marked as `REQUIRES_MANUAL_REVIEW`. *A flag does not prove fraud, and affordability does not guarantee credit approval.*
 
 ---
 
@@ -94,16 +114,16 @@ The database automatically seeds two realistic small-business profiles:
 - **Shell:** Windows PowerShell.
 - **Core Libraries:**
   - `streamlit`: Clean web dashboard and reactive user interface.
-  - `groq`: Fast inference SDK with native tool-calling support.
+  - `groq`: Fast inference SDK with native tool-calling support (`qwen/qwen3.8-27b`).
   - `python-dotenv`: Local environment configuration.
-  - `pytest`: Automated test harness.
+  - `pytest`: Automated test harness (21 automated checks).
   - `sqlite3`: Python standard library database.
 
 ---
 
 ## 🚀 Step-by-Step Setup Instructions (Windows PowerShell)
 
-Open PowerShell and run the following commands:
+Open Windows PowerShell and run:
 
 ### 1. Navigate to Project Directory
 ```powershell
@@ -116,9 +136,8 @@ python -m venv .venv
 ```
 
 ### 3. Install Dependencies
-Directly execute the virtual environment's pip without needing to modify PowerShell execution policies:
+Directly execute the virtual environment's pip without requiring changes to PowerShell execution policies:
 ```powershell
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
@@ -128,27 +147,27 @@ Copy the template configuration file:
 Copy-Item .env.example .env
 ```
 
-Open `.env` in Notepad or your editor:
+Open `.env` in Notepad:
 ```powershell
 notepad .env
 ```
 
-Fill in your Groq API key:
+Add your Groq API key:
 ```ini
-GROQ_API_KEY=gsk_your_actual_groq_api_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_API_KEY=gsk_your_groq_api_key_here
+GROQ_MODEL=qwen/qwen3.8-27b
 ```
 
 > **How to get a free Groq API Key:**
-> 1. Visit the official Groq Console: [https://console.groq.com/keys](https://console.groq.com/keys).
-> 2. Sign in with Google or GitHub.
-> 3. Click **"Create API Key"**, give it a name, copy the key, and paste it into `.env`.
+> 1. Visit [Groq Console](https://console.groq.com/keys).
+> 2. Sign in and click **"Create API Key"**.
+> 3. Paste the key into `.env`.
 > 
-> *Note: If you do not have an API key right now, BankPilot AI automatically activates **Demo Fallback Mode**, which allows you to run, test, and demo all five use cases deterministically.*
+> *Note: If no API key is provided, BankPilot AI automatically activates **Demo Fallback Mode**, allowing 100% offline testing of all five workflows.*
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Running Automated Verification Tests
 
 Run the full automated test suite covering ledger consistency, fraud detection, EMI math, amount parsing, and security boundaries:
 
@@ -156,7 +175,7 @@ Run the full automated test suite covering ledger consistency, fraud detection, 
 .\.venv\Scripts\python.exe -m pytest -v test_core.py
 ```
 
-All tests execute in isolated temporary databases and complete in seconds.
+All 21 tests execute in temporary isolated databases and complete in under 1 second.
 
 ---
 
@@ -168,86 +187,53 @@ Start the Streamlit web dashboard:
 .\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-The application will automatically open in your default browser at `http://localhost:8501`.
+The application will open in your browser at `http://localhost:8501`.
 
 ---
 
 ## 🎮 5–10 Minute Demo Walkthrough
 
-When presenting this project to interviewers or evaluators, follow this recommended walkthrough:
+When presenting this project to evaluators:
 
 1. **Orientation (1 min):**
-   - Point out the clean UI header and the disclaimer banner (*"Simulation only. All customer data, fraud rules and loan assessments are fictional."*).
-   - Show the **Status Indicator** in the sidebar (Live Groq LLM or Demo Fallback Mode).
-   - Highlight the integer-paise SQLite database automatically created on first launch (`bankpilot.db`).
+   - Point out the clean UI header and the notice banner (*"Demo data only. All customer balances, transactions, fraud rules and loan assessments are fictional simulation records."*).
+   - Show the **AI Engine Status** in the sidebar (indicates Live Groq LLM or Demo Fallback Mode).
+   - Point out the integer-paise SQLite database automatically created on first launch (`bankpilot.db`).
 
-2. **Clean Profile Assessment — Apex Traders (2 mins):**
-   - Select `CUST-101` in the sidebar.
-   - Click **Quick Button 1 ("Balance & Details")**: Show the clean account overview.
-   - Click **Quick Button 4 ("₹1 Lakh Loan Affordability")**:
-     - Point out the EMI calculation (₹8,885/month).
-     - Show that total EMI (₹23,885) is ~15.9% of income, well below the 50% FOIR limit.
+2. **Clean Account Assessment — Apex Traders (2 mins):**
+   - Select `CUST-101 — Apex Traders` in the sidebar.
+   - Click **Quick Button 1 ("1. Balance & Details")**: Show the clean account overview (Available: ₹2,37,000.00).
+   - Click **Quick Button 4 ("4. ₹1 Lakh Loan Affordability")**:
+     - Point out the calculated EMI (₹8,885/month).
+     - Show total EMI (₹23,885) is ~15.9% of income (well below the 50% limit).
      - Observe the outcome: `✅ AFFORDABLE (Within Policy)`.
-   - Expand the **Explainable Execution Trace** on the right to show tool arguments, execution latency, and specialist status.
+   - Expand the **Explainable Agent Activity Trace** on the right to show tool arguments, execution latency, and specialist status.
 
 3. **Risk & Anomaly Detection — BlueHorizon Logistics (2 mins):**
-   - Switch to `CUST-102` in the sidebar dropdown.
-   - Click **Quick Button 3 ("Suspicious Check")**:
+   - Switch to `CUST-102 — BlueHorizon Logistics` in the sidebar dropdown. Notice how chat context resets cleanly.
+   - Click **Quick Button 3 ("3. Suspicious Check")**:
      - The Fraud Specialist flags two violations:
        1. *Large Debit Threshold:* Single debit of ₹65,000 for hydraulic equipment exceeds ₹50,000.
        2. *Rapid Velocity:* 3 debits in the last 24 hours.
-   - Click **Quick Button 5 ("Combined 3-Agent Evaluation")**:
+   - Click **Quick Button 5 ("5. Combined 3-Agent Review")**:
      - Watch the multi-agent cascade: Banking → Fraud → Loan.
      - Notice the loan outcome: `⚠️ HELD FOR UNDERWRITER MANUAL REVIEW`.
      - Explain how the fraud finding was passed forward to prevent automated loan approval while still presenting transparent EMI calculations.
 
 4. **Transaction Simulator & Overdraft Protection (2 mins):**
-   - In the **Transaction Simulator Form**, post a new debit of ₹15,000.
+   - Expand the **Transaction Simulator** form. Post a debit of ₹15,000.
    - Show that the ledger updates immediately and the available balance reflects the deduction.
    - Now attempt to post an excessive debit (e.g., ₹10,00,000).
    - Demonstrate the immediate rejection under the simulated no-overdraft policy (`Insufficient funds`).
 
 5. **Demo Reset (30 seconds):**
-   - Click the **"Reset Demo Data"** button in the sidebar to show how state and seed data are restored to pristine condition.
-
----
-
-## 🔒 Security & Architectural Decisions
-
-* **Customer Scope Injection:**  
-  The LLM is strictly prohibited from selecting or overriding the `customer_id`. The application session injects the verified active customer ID directly into the tool dispatcher.
-* **Deterministic Fallback Engine:**  
-  If the Groq API key is missing or network connectivity is interrupted, the application switches to a deterministic pattern engine without crashing or disrupting the demo.
-* **Integer Paise Arithmetic:**  
-  Currency is stored as integer paise in SQLite (`₹100.50` = `10050` paise) to prevent floating-point rounding accumulation errors.
-* **Simulated Real-Time Definition:**  
-  "Simulated real-time" refers to immediate transactional processing of user-generated events and rule evaluations in memory/SQLite; this is not a distributed streaming Kafka platform.
-* **No Secret Leakage:**  
-  API keys, raw credentials, and internal chain-of-thought tokens are never rendered in the UI or written to logs.
-
----
-
-## 💡 Top 5 Likely Interview Questions & Answers
-
-### Q1: Why did you store balances in integer paise instead of floating-point numbers?
-> **Answer:** In financial systems, binary floating-point representations (like Python `float` or SQL `FLOAT`) suffer from base-2 conversion inaccuracies (e.g., `0.1 + 0.2 = 0.30000000000000004`). Over millions of transactions, these rounding errors compound into balance discrepancies. By storing amounts in integer paise (`₹1 = 100 paise`), all ledger operations use exact integer addition and subtraction.
-
-### Q2: How do you prevent the LLM from accessing data belonging to another customer?
-> **Answer:** We enforce customer-scope boundaries in application code, not in prompts. When a specialist agent requests a tool call, the tool dispatcher ignores any `customer_id` supplied by the model and injects the trusted `customer_id` from the authenticated session state directly into the tool parameters.
-
-### Q3: Why did you use an explicit Supervisor instead of letting one LLM handle all tasks?
-> **Answer:** A single generic prompt is prone to hallucination, role bleeding, and security risks. By separating into a Supervisor and three bounded Specialists (Banking, Fraud, Loan), each agent has a narrow system instruction, a strict tool allowlist, and independent testability.
-
-### Q4: How do the Fraud and Loan agents communicate in the combined evaluation?
-> **Answer:** The Supervisor orchestrates execution in canonical order: Banking → Fraud → Loan. The Fraud Specialist evaluates transaction anomalies first. If unresolved flags are detected, the findings are injected into the Loan Specialist's context. The loan tool then marks the assessment as `REQUIRES_MANUAL_REVIEW`, ensuring that high-risk accounts are never falsely marked as approved.
-
-### Q5: What happens if Groq is down or the user does not have an API key?
-> **Answer:** BankPilot AI includes an automatic, visibly labelled **Demo Fallback Mode**. When the Groq client is unavailable, the Supervisor and Specialists fall back to deterministic regex pattern matchers and rule-based dispatchers. This allows offline demonstration of all 5 use cases without compromising reliability.
+   - Click **"Reset Demo Data"** in the sidebar to show how state and seed records are restored to pristine baseline.
 
 ---
 
 ## ⚖️ Project Limitations & Scope
 
+- **Focused Academic MVP:** Implements a focused subset of the reference architecture for student submission.
 - **Fictional Simulation:** All customer records, transaction histories, interest rates, and risk policies are simulated for academic demonstration.
-- **Single Hosted Model:** One configurable hosted LLM (`llama-3.3-70b-versatile`) is shared across agent personas via distinct prompts and tool allowlists.
-- **In-Process Tools:** Banking APIs and credit checks are simulated via local SQLite functions; there are no live core banking integrations or external credit bureaus.
+- **Single Hosted Model:** One configurable hosted LLM (`qwen/qwen3.8-27b`) is shared across agent personas via distinct prompts and tool allowlists.
+- **No External Integrations:** In-process tools simulate core banking; there are no live core banking integrations, user authentication, external credit bureaus, or distributed streaming infrastructure (e.g. Kafka).

@@ -450,3 +450,41 @@ def add_transaction(
         "updated_balance_paise": updated_balance["current_balance_paise"],
         "updated_balance_formatted": updated_balance["current_balance_formatted"],
     }
+
+
+DEMO_ACCOUNT_DESCRIPTIONS = {
+    "CUST-101": {
+        "business_name": "Apex Traders",
+        "proprietor": "Rajesh Sharma",
+        "account_type": "Current Account - SME",
+        "description": (
+            "Wholesale goods supplier. Steady operational cash flow, moderate monthly commitments "
+            "(₹15,000 existing EMI), and clean transaction history with zero policy breaches."
+        ),
+        "profile_summary": "Standard SME wholesale account. Demonstrates normal banking and approved loan affordability.",
+    },
+    "CUST-102": {
+        "business_name": "BlueHorizon Logistics",
+        "proprietor": "Priya Nair",
+        "account_type": "Current Account - Transport Commercial",
+        "description": (
+            "Commercial fleet operator. High-turnover cash flow with a recent high-value debit "
+            "(₹65,000 >= ₹50,000 policy threshold) and 3 rapid debits within 24 hours."
+        ),
+        "profile_summary": "Active transport commercial account. Demonstrates fraud risk detection and loan underwriter review hold.",
+    },
+}
+
+
+def get_demo_account_info(customer_id: str) -> Dict[str, str]:
+    """Retrieve grounded fictional description for a demo account."""
+    return DEMO_ACCOUNT_DESCRIPTIONS.get(
+        customer_id,
+        {
+            "business_name": "Unknown Business",
+            "proprietor": "Unknown",
+            "account_type": "Standard Account",
+            "description": "Sample business account for banking simulation.",
+            "profile_summary": "Demo account.",
+        },
+    )

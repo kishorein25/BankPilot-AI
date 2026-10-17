@@ -407,3 +407,102 @@ def test_combined_workflow_fraud_findings_passed_to_loan(temp_db):
     assert "banking" in response.supporting_tool_results
     assert "fraud" in response.supporting_tool_results
     assert "loan" in response.supporting_tool_results
+
+
+# ---------------------------------------------------------------------------
+# 7. Regression Tests: Grounding, Status Reporting, Simulator & Reset
+# ---------------------------------------------------------------------------
+
+
+def test_demo_account_descriptions_grounded(temp_db):
+    """Verify demo account descriptions accurately match stored database facts."""
+    db_file, _ = temp_db
+    info_101 = database.get_demo_account_info("CUST-101")
+    info_102 = database.get_demo_account_info("CUST-102")
+
+    cust_101 = database.get_customer("CUST-101", db_path=db_file)
+    cust_102 = database.get_customer("CUST-102", db_path=db_file)
+
+    assert info_101["business_name"] == cust_101["business_name"]
+    assert info_101["proprietor"] == cust_101["owner_name"]
+    assert "₹15,000" in info_101["description"]
+
+    assert info_102["business_name"] == cust_102["business_name"]
+    assert info_102["proprietor"] == cust_102["owner_name"]
+    assert "₹65,000" in info_102["description"]
+
+
+def test_honest_llm_status_reporting(temp_db):
+    """Verify honest status reporting across offline fallback and API failure."""
+    db_file, _ = temp_db
+
+    # Test 1: Offline fallback (no client)
+    with patch("agents.get_groq_client", return_value=None):
+        resp_fallback = agents.process_user_query(
+            customer_id="CUST-101",
+            query="Show my balance and account details.",
+            db_path=db_file,
+        )
+        assert resp_fallback.llm_status == "fallback_deterministic"
+
+    # Test 2: API error fallback (client throws exception)
+    mock_bad_client = MagicMock()
+    mock_bad_client.chat.completions.create.side_effect = RuntimeError("Groq Connection Refused")
+    with patch("agents.get_groq_client", return_value=mock_bad_client):
+        resp_error = agents.process_user_query(
+            customer_id="CUST-101",
+            query="Show my balance and account details.",
+            db_path=db_file,
+        )
+        assert resp_error.llm_status == "api_error_fallback"
+
+
+def test_simulator_updates_refresh_account_and_balance(temp_db):
+    """Verify posting a simulator transaction immediately updates account balance for next request."""
+    db_file, _ = temp_db
+    customer_id = "CUST-101"
+
+    bal_before = database.get_account_balance(customer_id, db_path=db_file)
+    initial_balance = bal_before["current_balance_paise"]
+
+    # Simulate posting a ₹25,000 inventory procurement debit
+    debit_paise = database.rupees_to_paise(25000)
+    database.add_transaction(
+        customer_id=customer_id,
+        txn_type="DEBIT",
+        amount_paise=debit_paise,
+        description="Simulator Inventory Procurement",
+        db_path=db_file,
+    )
+
+    # Next query should immediately reflect new balance
+    resp = agents.process_user_query(
+        customer_id=customer_id,
+        query="Show my balance and account details.",
+        db_path=db_file,
+    )
+    b_tool_res = resp.supporting_tool_results["banking"]
+    assert b_tool_res["current_balance_paise"] == initial_balance - debit_paise
+
+
+def test_reset_demo_db_restores_baseline(temp_db):
+    """Verify reset_demo_db completely restores original accounts and transaction counts."""
+    db_file, ref_time = temp_db
+    customer_id = "CUST-101"
+
+    # Add a custom transaction
+    database.add_transaction(
+        customer_id=customer_id,
+        txn_type="CREDIT",
+        amount_paise=database.rupees_to_paise(50000),
+        description="Temporary Custom Credit",
+        db_path=db_file,
+    )
+    txns_modified = database.get_recent_transactions(customer_id, limit=20, db_path=db_file)
+    assert len(txns_modified) == 6  # 5 seeded + 1 custom
+
+    # Reset
+    database.reset_demo_db(db_path=db_file, ref_time=ref_time)
+    txns_restored = database.get_recent_transactions(customer_id, limit=20, db_path=db_file)
+    assert len(txns_restored) == 5
+    assert not any("Temporary Custom Credit" in t["description"] for t in txns_restored)
