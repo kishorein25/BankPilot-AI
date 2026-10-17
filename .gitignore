@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local environment configuration
+.env
+
+# SQLite runtime databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Streamlit temporary data
+.streamlit/
